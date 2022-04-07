@@ -1,0 +1,3 @@
+[submodule "Assets/Packages/EfficientSpacialDataStructureUnity"]
+	path = Assets/Packages/EfficientSpacialDataStructureUnity
+	url = https://github.com/nobnak/EfficientSpacialDataStructureUnity.git
