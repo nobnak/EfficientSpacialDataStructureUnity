@@ -1,2 +1,2 @@
-# Unity project for [Spatial data structure](https://github.com/nobnak/EfficientSpatialDataStructureUnity) module
+# Unity project for [Spatial data structure](https://github.com/nobnak/EffSpaceUnity) module
  
