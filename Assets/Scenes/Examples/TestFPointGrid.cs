@@ -1,4 +1,5 @@
 using EffSpace.Collections;
+using EffSpace.Constants;
 using EffSpace.Extensions;
 using EffSpace.Models;
 using LLGraphicsUnity;
@@ -7,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace EffSpace.Examples {
 
@@ -19,6 +21,7 @@ namespace EffSpace.Examples {
 		protected FPointGrid grid;
 		protected int2 cellCount;
 		protected float2 cellSize;
+		protected float2 fieldSize;
 
 		protected float4x4 screenToWorld;
 		protected List<Particle> particleList;
@@ -40,7 +43,7 @@ namespace EffSpace.Examples {
 				);
 
 			FPointGridExt.RecommendGrid(screen, 1 << tuner.grid, out cellCount, out cellSize);
-			var fieldSize = cellCount * cellSize;
+			fieldSize = cellCount * cellSize;
 			Debug.Log($"Screen: {screen}, Grid: n={cellCount}, field={fieldSize}");
 
 			grid = new FPointGrid(cellCount, cellSize, float2.zero);
@@ -111,38 +114,78 @@ namespace EffSpace.Examples {
 				MainTex = null,
 				ZWriteMode = false,
 				ZTestMode = GLProperty.ZTestEnum.ALWAYS,
+				SrcBlend = BlendMode.SrcAlpha,
+				DstBlend = BlendMode.One,
 			};
 			var qrange = 0.1f * screen.yy;
 			var search_limit_dist_sq = 2f * qrange.y * qrange.y;
+			var colorLerp = new float2(0, 10f * (float)particleList.Count / (cellCount.x * cellCount.y));
+			Debug.Log($"Color lerp: {colorLerp}");
+			var color0 = Color.clear;
+			var color1 = Color.cyan;
 
 			using (new GLMatrixScope())
 			using (gl.GetScope(data)) {
 				GL.LoadIdentity();
 				GL.LoadPixelMatrix();
+				var modelview = GL.modelview;
 
-				for (var i = 0; i < particleList.Count; i++) {
-					var p = particleList[i];
-					var pos = p.pos.xy;
-					var min_dist_sq = float.MaxValue;
-					var min_pos = float2.zero;
-					foreach (var e in grid.Query(pos - qrange, pos + qrange)) {
-						if (e == p.element) continue;
+				switch (tuner.visualMode) {
+					case Tuner.VisualMode.Grid:
+						for (var y = 0; y < cellCount.y; y++) {
+							var yoffset = y * cellSize.y;
+							var countOffset = y * cellCount.x;
+							for (var x = 0; x < cellCount.x; x++) {
+								var curr = grid.grid.grid[x + countOffset];
+								var count = 0;
+								while (curr != C.SENTRY) {
+									count++;
+									var leaf = grid.grid.leaves[curr];
+									curr = leaf.next;
+								}
+								if (count == 0) continue;
 
-						var eq = grid.grid.elements[e];
-						var q = particleList[eq.id];
-
-						var qpos = q.pos.xy;
-						var dist_sq = math.distancesq(qpos, pos);
-						if (dist_sq < min_dist_sq) {
-							min_dist_sq = dist_sq;
-							min_pos = qpos;
+								var t = (float)(count - colorLerp.x) / colorLerp.y;
+								var c = Color.Lerp(color0, color1, t);
+								using (gl.GetScope(new GLProperty(data) { Color = c })) {
+									var mv = Matrix4x4.TRS(
+										new float3(cellSize * new float2(x + 0.5f, y + 0.5f), 0f),
+										quaternion.identity,
+										new float3(cellSize, 1f));
+									GL.modelview = modelview * mv;
+									GLTool.DrawQuad();
+								}
+							}
 						}
-					}
-					if (min_dist_sq > search_limit_dist_sq) continue;
-					var d = math.sqrt(min_dist_sq);
-					using (new GLModelViewScope(Matrix4x4.TRS(p.pos, quaternion.identity, Vector3.one))) {
-						GLTool.CircleOutlineVertices(0.5f * d, 20).DrawLineStrip();
-					}
+						break;
+
+					case Tuner.VisualMode.Circle:
+						for (var i = 0; i < particleList.Count; i++) {
+							var p = particleList[i];
+							var pos = p.pos.xy;
+							var min_dist_sq = float.MaxValue;
+							var min_pos = float2.zero;
+							foreach (var e in grid.Query(pos - qrange, pos + qrange)) {
+								if (e == p.element) continue;
+
+								var eq = grid.grid.elements[e];
+								var q = particleList[eq.id];
+
+								var qpos = q.pos.xy;
+								var dist_sq = math.distancesq(qpos, pos);
+								if (dist_sq < min_dist_sq) {
+									min_dist_sq = dist_sq;
+									min_pos = qpos;
+								}
+							}
+							if (min_dist_sq > search_limit_dist_sq) continue;
+
+							var d = math.sqrt(min_dist_sq);
+							var mv = Matrix4x4.TRS(p.pos, quaternion.identity, Vector3.one);
+							GL.modelview = modelview * mv;
+							GLTool.CircleOutlineVertices(0.5f * d, 20).DrawLineStrip();
+						}
+						break;
 				}
 			}
 		}
@@ -153,6 +196,10 @@ namespace EffSpace.Examples {
 			public int count = 10;
 			public float speed = 0.1f;
 			public float freq = 0.1f;
+
+			public VisualMode visualMode = VisualMode.Grid;
+
+			public enum VisualMode { None = 0, Circle, Grid }
         }
 		[System.Serializable]
 		public class Link {
