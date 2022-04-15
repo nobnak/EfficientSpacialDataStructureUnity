@@ -26,6 +26,7 @@ namespace EffSpace.Examples {
 		protected float4x4 screenToWorld;
 		protected List<Particle> particleList;
 
+		protected int[] countsOnCell;
 		protected GLMaterial gl;
 
         private void OnEnable() {
@@ -46,7 +47,11 @@ namespace EffSpace.Examples {
 			fieldSize = cellCount * cellSize;
 			Debug.Log($"Screen: {screen}, Grid: n={cellCount}, field={fieldSize}");
 
+			countsOnCell = new int[cellCount.x * cellCount.y];
 			grid = new FPointGrid(cellCount, cellSize, float2.zero);
+
+			grid.OnAdd += (i, e) => countsOnCell[i]++;
+			grid.OnRemove += (i, e) => countsOnCell[i]--;
 
 			var rand = Unity.Mathematics.Random.CreateFromIndex(31);
 			particleList = new List<Particle>();
@@ -133,17 +138,9 @@ namespace EffSpace.Examples {
 				switch (tuner.visualMode) {
 					case Tuner.VisualMode.Grid:
 						for (var y = 0; y < cellCount.y; y++) {
-							var yoffset = y * cellSize.y;
 							var countOffset = y * cellCount.x;
 							for (var x = 0; x < cellCount.x; x++) {
-								var curr = grid.grid.grid[x + countOffset];
-								var count = 0;
-								while (curr != C.SENTRY) {
-									count++;
-									var leaf = grid.grid.leaves[curr];
-									curr = leaf.next;
-								}
-								if (count == 0) continue;
+								var count = countsOnCell[x + countOffset];
 
 								var t = (float)(count - colorLerp.x) / colorLerp.y;
 								var c = Color.Lerp(color0, color1, t);
